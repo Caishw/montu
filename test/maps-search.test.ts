@@ -1,40 +1,55 @@
 import { config } from 'dotenv'
 import { describe } from '@jest/globals'
-import { getPlaceAutocomplete } from '../src/maps-api'
+import { getPlaceAutoComplete } from '../src/maps-api'
 import { getAutoCompleteDetails } from '../src'
+import axios from 'axios';
+jest.mock('axios');
 
-config();
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+config({path: '.env.local'});
 
-// These are end-to-end tests and need an api key
-describe('Tomtom Places E2E Tests', () => {
+describe('Map-search', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        mockedAxios.get.mockResolvedValue({ data: {results: []} });
+    });
     describe('getAutoCompleteDetails', () => {
         it ('returns a promise', () => {
+            process.env.TOMTOM_API_KEY = 'blah'
+
             const res = getAutoCompleteDetails('Charlotte Street')
             expect(res).toBeInstanceOf(Promise)
         })
 
-        it('can fetch from the autocomplete api', async () => {
-            const res = await getAutoCompleteDetails('Charlotte Street')
-            const firstRes = res[0];
-            expect(firstRes).toHaveProperty('placeId')
-            expect(firstRes).toHaveProperty('streetNumber')
-            expect(firstRes).toHaveProperty('countryCode')
-            expect(firstRes).toHaveProperty('country')
-            expect(firstRes).toHaveProperty('freeformAddress')
-            expect(firstRes).toHaveProperty('municipality')
-        })
+        it('should not call the api if the tomtom api is not provided', async () => {
+            delete process.env.TOMTOM_API_KEY
+            await expect(getAutoCompleteDetails('Charlotte Street')).rejects.toThrow('Please provide the tomtom api key')
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+
+        });
     })
 
     describe('getPlaceAutocomplete', () => {
-
         it('handles no results', async () => {
-            const res = await getPlaceAutocomplete(process.env.TOMTOM_API_KEY, 'asfasffasfasafsafs');
+            const res = await getPlaceAutoComplete('apiKey', 'asfasffasfasafsafs');
             expect(res).toStrictEqual([])
         })
 
-        it('handles error', async () => {
-            expect(getPlaceAutocomplete(process.env.TOMTOM_API_KEY, '')).rejects.toThrow()
+        it('handles error from the api',  async () => {
+            mockedAxios.get.mockRejectedValue(new Error('Request unauthorised'));
+            const res = getPlaceAutoComplete('apiKey', '');
+            await expect(res).rejects.toThrow('Request unauthorised')
         })
+
+        it('should only fetch australian addresses', async() => {
+            await getPlaceAutoComplete('apiKey', 'asfasffasfasafsafs');
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://api.tomtom.com/search/2/search/asfasffasfasafsafs.json?countrySet=AU`, {
+                params: {
+                    key: 'apiKey',
+                    limit: 100,
+                }
+            })
+        });
     })
 
 })
