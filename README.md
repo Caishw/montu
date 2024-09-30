@@ -26,6 +26,7 @@ Install:
 Test:
 =====
 1. yarn install
+2. Add the TOMTOM API key in .env.local
 2. yarn test
 
 
